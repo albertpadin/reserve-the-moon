@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Moon Map</title>
+    <script src="https://polyfill.io/v3/polyfill.min.js?features=default"></script>
+
+    <style type="text/css">
+      #map {
+        height: 100%;
+      }
+
+      html,
+      body {
+        height: 100%;
+        margin: 0;
+        padding: 0;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="map"></div>
+
+    <script
+      src="https://maps.googleapis.com/maps/api/js?key=AIzaSyBIwzALxUPNbatRBj3Xi1Uhp0fFzwWNBkE&callback=initMap&libraries=&v=weekly&libraries=drawing"
+      async
+    >
+    </script>
+
+    <script type="text/javascript">
+
+    const userName = prompt("What's your name?");
+
+    let map;
+    let drawingManager;
+    let selectedShape;
+
+    function initMap() {
+      const map = new google.maps.Map(document.getElementById("map"), {
+        center: { lat: 0, lng: 0 },
+        disableDefaultUI: true,
+        zoom: 5,
+        streetViewControl: false,
+        mapTypeControlOptions: {
+          mapTypeIds: ["moon"],
+        },
+      });
+      const moonMapType = new google.maps.ImageMapType({
+        getTileUrl: function (coord, zoom) {
+          const normalizedCoord = getNormalizedCoord(coord, zoom);
+
+          if (!normalizedCoord) {
+            return "";
+          }
+          const bound = Math.pow(2, zoom);
+          return (
+            "https://mw1.google.com/mw-planetary/lunar/lunarmaps_v1/clem_bw" +
+            "/" +
+            zoom +
+            "/" +
+            normalizedCoord.x +
+            "/" +
+            (bound - normalizedCoord.y - 1) +
+            ".jpg"
+          );
+        },
+        tileSize: new google.maps.Size(256, 256),
+        maxZoom: 9,
+        minZoom: 0,
+        radius: 1738000,
+        name: "Moon",
+      });
+      map.mapTypes.set("moon", moonMapType);
+      map.setMapTypeId("moon");
+
+      //Drawing Manager
+      drawingManager = new google.maps.drawing.DrawingManager({
+          drawingMode: google.maps.drawing.OverlayType.MARKER,
+          drawingControl: true,
+          drawingControlOptions: {
+            position: google.maps.ControlPosition.TOP_CENTER,
+            drawingModes: [
+              google.maps.drawing.OverlayType.RECTANGLE,
+            ],
+          },
+          markerOptions: {
+            icon:
+              "https://developers.google.com/maps/documentation/javascript/examples/full/images/beachflag.png",
+          },
+          rectangleOptions: {
+            strokeColor: "#FF0000",
+            strokeOpacity: 0.8,
+            strokeWeight: 2,
+            fillColor: "#FF0000",
+            fillOpacity: 0.35,
+          },
+        });
+        drawingManager.setMap(map);
+
+        google.maps.event.addListener(drawingManager, 'overlaycomplete', function(e) {
+          console.log('yeah', e);
+          drawingManager.setMap(null);
+
+          const lat = (e.overlay.bounds.Ra.g + e.overlay.bounds.Ra.i) / 2;
+          const lng = (e.overlay.bounds.La.g + e.overlay.bounds.La.i) / 2;
+          const latLng = { lat, lng }
+          addMarkerAsLabel(latLng, map, userName);
+
+          // Add an event listener that selects the newly-drawn shape when the user
+          // mouses down on it.
+          // let newShape = e.overlay;
+          // newShape.type = e.type;
+          // google.maps.event.addListener(newShape, 'click', function() {
+          //   setSelection(newShape);
+          // });
+          // setSelection(newShape);
+        });
+
+        google.maps.event.addListener(drawingManager, 'drawingmode_changed', clearSelection);
+        google.maps.event.addListener(map, 'click', clearSelection);
+        // google.maps.event.addDomListener(document.getElementById('delete-button'), 'click', deleteSelectedShape);
+    }
+
+    // Normalizes the coords that tiles repeat across the x axis (horizontally)
+    // like the standard Google map tiles.
+    function getNormalizedCoord(coord, zoom) {
+      const y = coord.y;
+      let x = coord.x;
+      // tile range in one direction range is dependent on zoom level
+      // 0 = 1 tile, 1 = 2 tiles, 2 = 4 tiles, 3 = 8 tiles, etc
+      const tileRange = 1 << zoom;
+
+      // don't repeat across y-axis (vertically)
+      if (y < 0 || y >= tileRange) {
+        return null;
+      }
+
+      // repeat across x-axis
+      if (x < 0 || x >= tileRange) {
+        x = ((x % tileRange) + tileRange) % tileRange;
+      }
+      return { x: x, y: y };
+    }
+
+    function addRectangle(coords) {
+      const rectangle = new google.maps.Rectangle({
+        strokeColor: "#FF0000",
+        strokeOpacity: 0.8,
+        strokeWeight: 2,
+        fillColor: "#FF0000",
+        fillOpacity: 0.35,
+        map,
+        bounds: {
+          north: 2,
+          south: -2,
+          east: 2,
+          west: -2,
+        },
+      });
+    }
+
+    function clearSelection() {
+      if (selectedShape) {
+        selectedShape.setEditable(false);
+        selectedShape = null;
+      }
+    }
+
+    function setSelection(shape) {
+      clearSelection();
+      selectedShape = shape;
+      shape.setEditable(true);
+      selectColor(shape.get('fillColor') || shape.get('strokeColor'));
+    }
+
+    function deleteSelectedShape() {
+      if (selectedShape) {
+        selectedShape.setMap(null);
+      }
+    }
+
+    function addMarkerAsLabel(position, map, title) {
+      console.log('position', position);
+      var marker = new google.maps.Marker({
+        position,
+        map,
+        draggable: false,
+        label: {
+          text: title,
+          color: "#FFFFFF",
+          textShadow: "2px 2px 2px #000000"
+        },
+        icon: {
+          path:
+            "M10.453 14.016l6.563-6.609-1.406-1.406-5.156 5.203-2.063-2.109-1.406 1.406zM12 2.016q2.906 0 4.945 2.039t2.039 4.945q0 1.453-0.727 3.328t-1.758 3.516-2.039 3.070-1.711 2.273l-0.75 0.797q-0.281-0.328-0.75-0.867t-1.688-2.156-2.133-3.141-1.664-3.445-0.75-3.375q0-2.906 2.039-4.945t4.945-2.039z",
+          fillColor: "blue",
+          fillOpacity: 0,
+          strokeWeight: 0,
+          rotation: 0,
+          scale: 2,
+          anchor: new google.maps.Point(0, 0),
+        }
+      });
+    }
+
+
+    </script>
+  </body>
+</html>
